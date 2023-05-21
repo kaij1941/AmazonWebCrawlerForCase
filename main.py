@@ -8,13 +8,24 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.action_chains import ActionChains
+import concurrent.futures
 
 # For A1-----------------------------------------------
 # For A1-----------------------------------------------
 # For A1-----------------------------------------------
 # For A1-----------------------------------------------
 
-db_Doing = False
+db_Doing = True
+db_True =True #是否為正式DB
+
+headers = httpx.Headers({
+    'accept-encoding': 'gzip, deflate, br',
+    'accept-language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+    'cookie': 'session-id=257-2028996-0896043; i18n-prefs=EGP; lc-acbeg=en_AE; ubid-acbeg=261-1798037-1499267; session-id-time=2082787201l; session-token=lTKhbG4Udz66QrWRIjnEK1rIGOjJh7oHQ7qE3DU++H+8t6b7fxWe7YXQDdfytAXhKxVYVbpH4W/vYUzyCFw/e1/pQAUxgBjoHHrhcgxGm4Nn4rPOOw+IlnX4THjoXO7vaIR21GNvriFz6J3iovRnI6ie9jyHr/q0ZgnUoVF01ymSiKG98Rs9hSNn830FeGM3yGtxBQ0YMJEmWYuT6waUwIhl+GzhqyXEK9/DGQDGokQ=; csm-hit=tb:s-N7M0X2V9YV3G1AWZ7ZX4|1684168857815&t:1684168858301&adb:adblk_yes',
+    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36',
+    'Origin': 'https://www.amazon.eg'
+})
 
 async def fetch_url(url):
     """
@@ -29,40 +40,6 @@ async def fetch_url(url):
     使用非同步方式向指定的網址發送請求，獲取網頁的內容並返回。
 
     """
-    # async with httpx.AsyncClient() as client:
-    #     headers = {
-    #         'accept-encoding': 'gzip, deflate, br',
-    #         'accept-language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
-    #         'cookie': 'session-id=257-2028996-0896043; i18n-prefs=EGP; lc-acbeg=en_AE; ubid-acbeg=261-1798037-1499267; session-id-time=2082787201l; session-token=lTKhbG4Udz66QrWRIjnEK1rIGOjJh7oHQ7qE3DU++H+8t6b7fxWe7YXQDdfytAXhKxVYVbpH4W/vYUzyCFw/e1/pQAUxgBjoHHrhcgxGm4Nn4rPOOw+IlnX4THjoXO7vaIR21GNvriFz6J3iovRnI6ie9jyHr/q0ZgnUoVF01ymSiKG98Rs9hSNn830FeGM3yGtxBQ0YMJEmWYuT6waUwIhl+GzhqyXEK9/DGQDGokQ=; csm-hit=tb:s-N7M0X2V9YV3G1AWZ7ZX4|1684168857815&t:1684168858301&adb:adblk_yes',
-    #         'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36',
-    #         'Origin':'https://www.amazon.eg'
-    #     }
-    #     response = await client.get(url, headers=headers)
-
-        # 非必要不使用 selenium , 效能問題
-        # webdriver_path = '/path/to/chromedriver'
-        #
-        # # 设置 Chrome 选项
-        # chrome_options = Options()
-        # chrome_options.add_argument('--headless')  # 无界面模式
-        #
-        # # 创建 Chrome WebDriver
-        # driver = webdriver.Chrome(service=Service(webdriver_path), options=chrome_options)
-        #
-        # # 打开目标网页
-        # driver.get(url)
-        #
-        # # 等待页面加载
-        # driver.implicitly_wait(2)
-        #
-        # # 设置请求头
-        # for key, value in headers.items():
-        #     driver.execute_cdp_cmd("Network.setExtraHTTPHeaders", {"headers": {key: value}})
-        #
-        # # 获取网页的HTML源代码
-        # html = driver.page_source
-        # driver.quit()
-
     async with httpx.AsyncClient(http2=True, limits=httpx.Limits(max_connections=10)) as client:
         headers = httpx.Headers({
             'accept-encoding': 'gzip, deflate, br',
@@ -73,6 +50,57 @@ async def fetch_url(url):
         })
         response = await client.get(url, headers=headers)
         return response.text
+
+async def web_crawler_with_selenium(url):
+    # 非必要不使用 selenium,效能問題
+    webdriver_path = '/path/to/chromedriver'
+
+    # 设置 Chrome 选项
+    chrome_options = Options()
+    chrome_options.add_argument('--headless')  # 无界面模式
+
+    # 创建 Chrome WebDriver
+    driver = webdriver.Chrome(service=Service(webdriver_path), options=chrome_options)
+    # 打开目标网页
+    driver.get(url)
+    # 等待页面加载
+    driver.implicitly_wait(0.1)
+    # 设置请求头
+    for key, value in headers.items():
+        driver.execute_cdp_cmd("Network.setExtraHTTPHeaders", {"headers": {key: value}})
+
+    # 定位父元素
+    parent_element = driver.find_element(By.ID, 'altImages')
+
+    # 定位所有的imageThumbnail元素
+    thumbnail_elements = driver.find_elements(By.CSS_SELECTOR, '.imageThumbnail')
+
+    # 创建ActionChains对象
+    actions = ActionChains(driver)
+
+    def slide_thumbnail(thumbnail_element):
+        # 找到img元素
+        img_element = thumbnail_element.find_element('tag name', 'img')
+
+        # 模拟将鼠标移动到img元素上
+        actions.move_to_element(img_element).perform()
+
+    # 并行处理元素滑动
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        # 提交任务并返回Future对象
+        futures = [executor.submit(slide_thumbnail, thumbnail_element) for thumbnail_element in thumbnail_elements]
+
+        # 等待所有任务完成
+        concurrent.futures.wait(futures)
+
+
+    # 获取网页的HTML源代码
+    html = driver.page_source
+    driver.quit()
+    return html
+
+
+
 
 async def excute_async(sql, values):
     """
@@ -89,13 +117,21 @@ async def excute_async(sql, values):
 
     """
     # 建立與資料庫的連線
-    conn = await aiomysql.connect(
-        host="localhost",
-        port=3306,
-        user="root",
-        password="J2294140319",
-        db="woshop_db"
-    )
+    if db_True :
+        conn = await aiomysql.connect(
+            host="8.218.38.94",
+            user="woshop",
+            password="DLpPbHtiMKw28sfE",
+            db="woshop_db"
+        )
+    else:
+        conn = await aiomysql.connect(
+            host="localhost",
+            port=3306,
+            user="root",
+            password="J2294140319",
+            db="woshop_db"
+        )
 
     # 建立游標
     cur = await conn.cursor()
@@ -125,13 +161,21 @@ async def query_async(sql, values):
 
     """
     # 建立與資料庫的連線
-    conn = await aiomysql.connect(
-        host="localhost",
-        port=3306,
-        user="root",
-        password="J2294140319",
-        db="woshop_db"
-    )
+    if db_True :
+        conn = await aiomysql.connect(
+            host="8.218.38.94",
+            user="woshop",
+            password="DLpPbHtiMKw28sfE",
+            db="woshop_db"
+        )
+    else:
+        conn = await aiomysql.connect(
+            host="localhost",
+            port=3306,
+            user="root",
+            password="J2294140319",
+            db="woshop_db"
+        )
 
     # 建立游標
     cur = await conn.cursor()
@@ -352,12 +396,6 @@ async def product_list_web_crawler(url, start_id,cat_id):
             price = '無價格資訊'
             skipItem.append(index-1)
         price_array.append(price)
-    # for price_element in price_elements:
-    #     if price_element:
-    #         price = re.sub(r'[^\d.]', '', price_element.text.strip())
-    #     else:
-    #         price = '無價格資訊'
-
 
     # === 市場價格 ===
     marketprice_elements = soup.select('a-offscreen')
@@ -377,10 +415,10 @@ async def product_list_web_crawler(url, start_id,cat_id):
         marketprice_array.append(marketprice)
 
     # thumb_img
-    thumbnail_elements = soup.select('.s-image')
+    thumbnail_elements = soup.select('.a-section .s-product-image-container .s-image')
     for thumbnail_element in thumbnail_elements:
         thumbnail_url = thumbnail_element['src']
-        thumb_img_array.append(thumbnail_url)
+        thumb_img_array.append(remove_number_from_url(thumbnail_url))
 
     # 開始處理個別商品頁的資訊
     print("開始", len(productnames_array), '筆品項')
@@ -395,56 +433,34 @@ async def product_list_web_crawler(url, start_id,cat_id):
     print('開始抓圖片起始點', "=>item_links:", len(item_links))
     for item_link in item_links:
         numitem_link += 1
-        time.sleep(0.2)
+        time.sleep(0.1)
         print("開始抓圖片:", numitem_link)
         pic_count = 0
         if item_link:
             item_url = item_link['href']
             item_url = 'https://www.amazon.eg' + item_url
-            item_html = await fetch_url(item_url)
+            item_html = await web_crawler_with_selenium(item_url)
             item_soup = BeautifulSoup(item_html, 'html.parser')
             # print("開始抓圖片:", numitem_link)
             # 獲取商品描述
-            #print("開始抓圖片:", numitem_link, '=>商品描述')
+            # print("開始抓圖片:", numitem_link, '=>商品描述')
             description_element = item_soup.select_one('#productDescription .a-unordered-list')
             description = description_element.text.strip() if description_element else '無商品描述'
             product_desc.append(description)
 
-
             # 尋找所有商品圖片的URL
-            #print("開始抓圖片:", numitem_link, '=>Url')
-            script_tags = item_soup.find_all('script')
-
-            pattern = r"'colorImages': \{.*?'initial': (\[.*?\])\}"
-            # 使用正则表达式提取 "large" 属性值
-            pattern1 = r'"large"\s*:\s*"([^"]+)"'
-
-            for script_tag in script_tags:
-                if "ImageBlockATF" in script_tag.text:
-                    match = re.search(pattern, script_tag.text)
-                    if match:
-                        script_data = match.string
-                        matches = re.findall(pattern1, script_data)
-
-                        # 打印提取到的"hiRes"值
-                        # 印出所有商品圖片的URL和商品描述
-                        for image_url in matches:
-                            if image_url not in image_urls and image_url:
-                                image_urls.append(image_url)
-                                # print(image_url)
-                                pic_count += 1
-                        product_piccount.append(pic_count)
-                        product_pics.append(image_urls)
-
-    # # 將列表轉換為元組，以便在集合中使用
-    # tuple_list = [tuple(sub_list) for sub_list in product_pics]
-    #
-    # # 使用集合來去除重複元組
-    # unique_tuples = set(tuple_list)
-
-    # # 將元組轉換回列表
-    # unique_product_pics = [list(sub_tuple) for sub_tuple in unique_tuples]
-    #print("測試")
+            # print("開始抓圖片:", numitem_link, '=>Url')
+            img_elements = item_soup.select('.a-list-item .imgTagWrapper img')
+            for img_element in img_elements:
+                image_url = img_element.get('data-old-hires')
+                if image_url is None or len(image_url.strip()) == 0:
+                    image_url = img_element.get('src')
+                image_url = remove_number_from_url(image_url)
+                image_urls.append(image_url)
+                # print(image_url)
+                pic_count += 1
+            product_piccount.append(pic_count)
+            product_pics.append(image_urls)
     # 印出商品流水號（Id）、商品名稱和價格
     skip = 0
     product_pic_index = 0
@@ -475,6 +491,7 @@ async def product_list_web_crawler(url, start_id,cat_id):
     for picnum in range(0, len(product_piccount)):
         if picnum in skipItem:
             id_minus += 1
+            product_pic_index += product_piccount[picnum]
             continue
         product_pic_self_index = 0
         for product_pic_count in range(0, product_piccount[picnum]):
@@ -486,6 +503,20 @@ async def product_list_web_crawler(url, start_id,cat_id):
                 product_pic_index += 1
                 product_pic_self_index += 1
     return int(id_array[-1]+1-id_minus)
+
+def remove_number_from_url(url):
+    """
+    從URL中移除數字的函數
+
+    參數：
+    url (str)：要處理的URL
+
+    返回值：
+    str：移除數字後的新URL
+    """
+    pattern = r"(_AC_[A-Z]+)\d+"  # 正則表達式模式，匹配含有數字的部分
+    new_url = re.sub(pattern, r"\1", url)  # 使用匹配的子串替換數字部分
+    return new_url
 
 async def get_categories(url):
     # 设置 WebDriver 的路径
@@ -555,7 +586,7 @@ async def main():
 
 
 
-    #cat_id = 2
+    # #cat_id = 2
     urls = [
         'https://www.amazon.eg/s?i=electronics&bbn=18018103031&rh=n%3A18018102031%2Cn%3A21832871031%2Cp_4%3AXO&dc&language=en_AE&ds=v1%3ALqFkO4vJ9G9izb9yqVdx7g1JPAsO7%2FF3a2ZlWVgxpHI&pf_rd_i=18018102031&pf_rd_m=A1ZVRGNO5AYLOV&pf_rd_p=825c0142-9b0c-4a77-a6f2-b100f037e545&pf_rd_r=VF466KFA3FWQ7827B7MK&pf_rd_s=mobile-hybrid-12&pf_rd_t=30901&qid=1684333054&rnid=18018103031&ref=sr_nr_n_1'
        ,'https://www.amazon.eg/-/en/s?i=electronics&bbn=18018103031&rh=n%3A18018102031%2Cn%3A21832871031%2Cp_4%3AXO&dc&page=2&language=en_AE&pf_rd_i=18018102031&pf_rd_m=A1ZVRGNO5AYLOV&pf_rd_p=825c0142-9b0c-4a77-a6f2-b100f037e545&pf_rd_r=VF466KFA3FWQ7827B7MK&pf_rd_s=mobile-hybrid-12&pf_rd_t=30901&qid=1684333066&rnid=18018103031&ref=sr_pg_2'
@@ -575,7 +606,8 @@ async def main():
     # cat_id = 4
     urls = [
            'https://www.amazon.eg/s?i=electronics&bbn=18018103031&rh=n%3A18018102031%2Cn%3A21832869031%2Cp_4%3AXO&dc&language=en_AE&ds=v1%3A5rXzZsZEzbgqlGRbt7FdUaVEvS%2FsHEhQfzgMg%2B5zjJw&pf_rd_i=18018102031&pf_rd_m=A1ZVRGNO5AYLOV&pf_rd_p=825c0142-9b0c-4a77-a6f2-b100f037e545&pf_rd_r=VF466KFA3FWQ7827B7MK&pf_rd_s=mobile-hybrid-12&pf_rd_t=30901&qid=1684255290&rnid=18018103031&ref=sr_nr_n_3'
-         , 'https://www.amazon.eg/-/en/s?i=electronics&bbn=18018103031&rh=n%3A18018102031%2Cn%3A21832869031%2Cp_4%3AXO&dc&page=2&language=en_AE&pf_rd_i=18018102031&pf_rd_m=A1ZVRGNO5AYLOV&pf_rd_p=825c0142-9b0c-4a77-a6f2-b100f037e545&pf_rd_r=VF466KFA3FWQ7827B7MK&pf_rd_s=mobile-hybrid-12&pf_rd_t=30901&qid=1684255296&rnid=18018103031&ref=sr_pg_2'
+         ,
+        'https://www.amazon.eg/-/en/s?i=electronics&bbn=18018103031&rh=n%3A18018102031%2Cn%3A21832869031%2Cp_4%3AXO&dc&page=2&language=en_AE&pf_rd_i=18018102031&pf_rd_m=A1ZVRGNO5AYLOV&pf_rd_p=825c0142-9b0c-4a77-a6f2-b100f037e545&pf_rd_r=VF466KFA3FWQ7827B7MK&pf_rd_s=mobile-hybrid-12&pf_rd_t=30901&qid=1684255296&rnid=18018103031&ref=sr_pg_2'
     ]
     urls_list.append(urls)
 
@@ -604,11 +636,11 @@ async def main():
      , 'https://www.amazon.eg/-/en/s?i=electronics&bbn=18018103031&rh=n%3A18018102031%2Cn%3A21832868031%2Cp_4%3AXO&dc&page=6&language=en_AE&pf_rd_i=18018102031&pf_rd_m=A1ZVRGNO5AYLOV&pf_rd_p=825c0142-9b0c-4a77-a6f2-b100f037e545&pf_rd_r=VF466KFA3FWQ7827B7MK&pf_rd_s=mobile-hybrid-12&pf_rd_t=30901&qid=1684256135&rnid=18018103031&ref=sr_pg_6'
      , 'https://www.amazon.eg/-/en/s?i=electronics&bbn=18018103031&rh=n%3A18018102031%2Cn%3A21832868031%2Cp_4%3AXO&dc&page=7&language=en_AE&pf_rd_i=18018102031&pf_rd_m=A1ZVRGNO5AYLOV&pf_rd_p=825c0142-9b0c-4a77-a6f2-b100f037e545&pf_rd_r=VF466KFA3FWQ7827B7MK&pf_rd_s=mobile-hybrid-12&pf_rd_t=30901&qid=1684256222&rnid=18018103031&ref=sr_pg_7'
      , 'https://www.amazon.eg/-/en/s?i=electronics&bbn=18018103031&rh=n%3A18018102031%2Cn%3A21832868031%2Cp_4%3AXO&dc&page=8&language=en_AE&pf_rd_i=18018102031&pf_rd_m=A1ZVRGNO5AYLOV&pf_rd_p=825c0142-9b0c-4a77-a6f2-b100f037e545&pf_rd_r=VF466KFA3FWQ7827B7MK&pf_rd_s=mobile-hybrid-12&pf_rd_t=30901&qid=1684256225&rnid=18018103031&ref=sr_pg_8'
-     , 'https://www.amazon.eg/-/en/s?i=electronics&bbn=18018103031&rh=n%3A18018102031%2Cn%3A21832868031%2Cp_4%3AXO&dc&page=9&language=en_AE&pf_rd_i=18018102031&pf_rd_m=A1ZVRGNO5AYLOV&pf_rd_p=825c0142-9b0c-4a77-a6f2-b100f037e545&pf_rd_r=VF466KFA3FWQ7827B7MK&pf_rd_s=mobile-hybrid-12&pf_rd_t=30901&qid=1684256256&rnid=18018103031&ref=sr_pg_9'
+
     ]
     urls_list.append(urls)
 
-    ##Portable Sound & Vision
+    #Portable Sound & Vision
     # cat_id = 8
     urls = [
       'https://www.amazon.eg/s?i=electronics&bbn=18018103031&rh=n%3A18018102031%2Cn%3A21832877031%2Cp_4%3AXO&dc&language=en_AE&ds=v1%3AoAZWWIp3rZli2IJ3clj4I3SsjBu7kYVZTE%2B1KEBdTRw&pf_rd_i=18018102031&pf_rd_m=A1ZVRGNO5AYLOV&pf_rd_p=825c0142-9b0c-4a77-a6f2-b100f037e545&pf_rd_r=VF466KFA3FWQ7827B7MK&pf_rd_s=mobile-hybrid-12&pf_rd_t=30901&qid=1684256333&rnid=18018103031&ref=sr_nr_n_7'
@@ -634,7 +666,7 @@ async def main():
 
     # cat_id = 11
     urls = [
-    'https://www.amazon.eg/s?i=electronics&bbn=18018103031&rh=n%3A18018102031%2Cn%3A21832878031%2Cp_4%3AXO&dc&language=en_AE&ds=v1%3ASaIqHNaWFM%2FVFkP0%2Fwzf40zLDV79OaVHc6%2BBl4VtMho&pf_rd_i=18018102031&pf_rd_m=A1ZVRGNO5AYLOV&pf_rd_p=825c0142-9b0c-4a77-a6f2-b100f037e545&pf_rd_r=VF466KFA3FWQ7827B7MK&pf_rd_s=mobile-hybrid-12&pf_rd_t=30901&qid=1684256459&rnid=18018103031&ref=sr_nr_n_10'
+    'https://www.amazon.eg/s?i=electronics&bbn=18018103031&rh=n%3A18018102031%2Cn%3A21832878031%2Cp_4%3AXO&dc&language=en_AE&ds=v1%3AOr721RaOmU23O6UP7tlFOvOD9HcKouUx%2F0LKPwUwPmE&pf_rd_i=18018102031&pf_rd_m=A1ZVRGNO5AYLOV&pf_rd_p=825c0142-9b0c-4a77-a6f2-b100f037e545&pf_rd_r=VF466KFA3FWQ7827B7MK&pf_rd_s=mobile-hybrid-12&pf_rd_t=30901&qid=1684527447&rnid=18018103031&ref=sr_nr_n_10'
     ]
     urls_list.append(urls)
 
@@ -642,14 +674,16 @@ async def main():
     start_id = 1
     for urls_list_index in range(0, len(urls_list)):
         for url_num_Index in range(0, len(urls_list[urls_list_index])):
-            print(str(cat_id) + '類 開始' + str(url_num_Index) + '頁-------------------------')
-            print(str(cat_id) + '類 開始' + str(url_num_Index) + '頁-------------------------')
-            print(str(cat_id) + '類 開始' + str(url_num_Index) + '頁-------------------------')
+            print(str(cat_id) + '類 開始' + str(url_num_Index+1) + '頁-------------------------')
+            print(str(cat_id) + '類 開始' + str(url_num_Index+1) + '頁-------------------------')
+            print(str(cat_id) + '類 開始' + str(url_num_Index+1) + '頁-------------------------')
+            print(str(cat_id) + '類 開始' + str(url_num_Index+1) + '頁-------------------------')
             start_id = await product_list_web_crawler(urls_list[urls_list_index][url_num_Index], start_id, cat_id)
-            print('目前打印完' + str(url_num_Index) + '頁，共', start_id, '筆')
-            print('目前打印完' + str(url_num_Index) + '頁，共', start_id, '筆')
-            print('目前打印完' + str(url_num_Index) + '頁，共', start_id, '筆')
-            time.sleep(0.5)
+            print('目前打印完' + str(cat_id) + '類' + str(url_num_Index+1) + '頁，共', start_id, '筆')
+            print('目前打印完' + str(cat_id) + '類' + str(url_num_Index+1) + '頁，共', start_id, '筆')
+            print('目前打印完' + str(cat_id) + '類' + str(url_num_Index+1) + '頁，共', start_id, '筆')
+            print('目前打印完' + str(cat_id) + '類' + str(url_num_Index+1) + '頁，共', start_id, '筆')
+            time.sleep(0.3)
         cat_id += 1
     print('完成')
 
